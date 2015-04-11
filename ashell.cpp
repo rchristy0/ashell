@@ -23,6 +23,7 @@ int alive = 1;
 char *curWD = new char[PATH_MAX];
 char *home_path = getenv("HOME");
 vector<string> history;
+int prev = 0;
 
 void ResetCanonicalMode(int fd, struct termios *savedattributes)
 {
@@ -125,15 +126,17 @@ void parseInput(string line_in)
       chdir(direc);
     }
     getcwd(curWD, PATH_MAX);
+    return;
   } 
   else if(strcmp(args[0], "ls") == 0)
   {
-    
+    return;
   }
   else if(strcmp(args[0], "pwd") == 0)
   {
     write(STDOUT_FILENO, curWD, strlen(curWD));
     write(STDOUT_FILENO, "\n", 1);
+    return;
   }
   else if(strcmp(args[0], "history") == 0)
   {
@@ -146,6 +149,7 @@ void parseInput(string line_in)
       write(STDOUT_FILENO, history[i].c_str(), history[i].length());
       write(STDOUT_FILENO, "\n", 1);
     }
+    return;
   }
   else if(strcmp(args[0], "exit") == 0)
   {
@@ -203,6 +207,7 @@ int main(int argc, char **argv)
         addToHistory(line_in);
         parseInput(line_in);
         line_in = "";
+        prev = 0;
         prPrompt = 1;
         break;
       //backspace pressed
@@ -217,6 +222,63 @@ int main(int argc, char **argv)
           line_in.erase(line_in.length() - 1);
         }
         break;
+      //arrow key pressed
+      case 0x1B:      
+        read(STDIN_FILENO, &char_in, 1);
+        if(char_in != 0x5B)
+        {
+          break;
+        }
+        read(STDIN_FILENO, &char_in, 1);
+        //up arrow
+        if(char_in == 0x41)
+        {
+          string temp;          
+          if(history.empty() || prev + 1 > history.size())
+          {
+            write(STDOUT_FILENO, "\a", 1);
+            break;
+          }
+          prev++;
+          temp = history[history.size() - prev];
+          for(int i = 0; i < line_in.size(); i++)
+          {
+            write(STDOUT_FILENO, "\b \b", 3);
+          }
+          write(STDOUT_FILENO, temp.c_str(),temp.length());
+          line_in = temp;
+          break;
+        }
+        //down arrow
+        else if(char_in == 0x42)
+        {
+          string temp;
+          if(prev == 0)
+          {
+            write(STDOUT_FILENO, "\a", 1);
+            break;
+          }
+          prev--;
+          if(prev == 0)
+          {
+            temp = "";
+          }
+          else
+          {
+            temp = history[history.size() - prev];
+          }
+          for(int i = 0; i < line_in.size(); i++)
+          {
+            write(STDOUT_FILENO, "\b \b", 3);
+          }
+          write(STDOUT_FILENO, temp.c_str(),temp.length());
+          line_in = temp;
+          break;
+        }
+        else
+        {
+          break;
+        }
       //normal character
       default:
         write(STDOUT_FILENO, &char_in, 1);
