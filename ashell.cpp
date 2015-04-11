@@ -20,7 +20,8 @@ using namespace std;
 
 int alive = 1;
 
-char* curWD = new char[PATH_MAX];
+char *curWD = new char[PATH_MAX];
+char *home_path = getenv("HOME");
 vector<string> history;
 
 void ResetCanonicalMode(int fd, struct termios *savedattributes)
@@ -116,12 +117,14 @@ void parseInput(string line_in)
   {
     if(args[1] == NULL)
     {
-      cout<<"this works? \n";
+      chdir(home_path);
     }
     else
     {
-    string direc;
+      char *direc = args[1];
+      chdir(direc);
     }
+    getcwd(curWD, PATH_MAX);
   } 
   else if(strcmp(args[0], "ls") == 0)
   {
