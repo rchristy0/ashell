@@ -80,10 +80,7 @@ vector<string> splitString(string str)
 // write a string to specified output. 
 void writeToOutput(int filedes, string str)
 {
-  for(int i=0; i<str.length(); i++)\
-  {
-    write(filedes, &str.at(i), 1); 
-  }
+  write(filedes, &str, str.length()); 
 }
 
 void parseOutput(string output, int des)
