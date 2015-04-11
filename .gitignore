@@ -27,6 +27,9 @@
 *.out
 *.app
 
+# Program
+ashell
+
 # =========================
 # Operating System Files
 # =========================
