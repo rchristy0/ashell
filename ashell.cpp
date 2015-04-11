@@ -9,6 +9,7 @@
 #include <errno.h>
 #include <dirent.h>
 
+#include <cstring>
 #include <string>
 #include <stdio.h>
 #include <vector>
@@ -88,33 +89,35 @@ void parseOutput(string output, int des, int& alive)
   
   for(int i = 0; i < parts.size(); i++)
   {
-    args[i] = parts[i].c_str();
+    args[i] = new char [parts[i].size()+1];
+    strcpy(args[i], parts[i].c_str());
   }
   args[parts.size()] = NULL;
   
-  if(args[0] == "cd")
+  if(strcmp(args[0], "cd") == 0)
   {
     
   } 
-  else if(args[0] == "ls")
+  else if(strcmp(args[0], "ls") == 0)
   {
     
   }
-  else if(args[0] == "pwd")
+  else if(strcmp(args[0], "pwd") == 0)
   {
   
   }
-  else if(args[0] == "history")
+  else if(strcmp(args[0], "history") == 0)
   {
     
   }
-  else if(args[0] == "exit")
+  else if(strcmp(args[0], "exit") == 0)
   {
     alive = 0;
     return;
   } 
   else 
   {
+    //temporary printing of func plus args
     cout << "outputting \n";
     for (int i = 0; i < parts.size(); i++)
     {
