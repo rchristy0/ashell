@@ -63,7 +63,7 @@ vector<string> splitString(string str)
     if(split != -1)
     {
       tok = str.substr(front, split - front);
-      front = split + 1;
+      front = str.find_first_not_of(' ', split);
       parts.push_back(tok);
     }
     else
