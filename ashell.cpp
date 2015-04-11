@@ -55,18 +55,15 @@ vector<string> splitString(string str)
   while(1)
   {
     split = str.find(' ', front);
-    
     if(split != -1)
     {
-      tok = str.substr(front, split);
-      cout <<tok<<front<<split<< '\n';
+      tok = str.substr(front, split - front);
       front = split + 1;
       parts.push_back(tok);
     }
     else
     {
       tok = str.substr(front, str.size());
-      cout <<tok<<front<<split<< '\n';
       parts.push_back(tok);
       break;
     }
@@ -87,25 +84,31 @@ void writeToOutput(int filedes, string str)
 void parseOutput(string output, int des, int& alive)
 {
   vector<string> parts = splitString(output);
-  string func = parts[0];
+  char *args[parts.size() + 1];
   
-  if(func.compare("cd") == 0)
+  for(int i = 0; i < parts.size(); i++)
+  {
+    args[i] = parts[i].c_str();
+  }
+  args[parts.size()] = NULL;
+  
+  if(args[0] == "cd")
   {
     
   } 
-  else if(func.compare("ls") == 0)
+  else if(args[0] == "ls")
   {
     
   }
-  else if(func.compare("pwd") == 0)
+  else if(args[0] == "pwd")
   {
   
   }
-  else if(func.compare("history") == 0)
+  else if(args[0] == "history")
   {
     
   }
-  else if(func.compare("exit") == 0)
+  else if(args[0] == "exit")
   {
     alive = 0;
     return;
