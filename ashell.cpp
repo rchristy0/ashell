@@ -19,7 +19,8 @@
 using namespace std;
 
 int alive = 1;
-string curWD = "";
+
+string curWD = "this is the current working directory";
 string* history = new string[10];
 
 void ResetCanonicalMode(int fd, struct termios *savedattributes)
@@ -76,16 +77,10 @@ vector<string> splitString(string str)
   
   return parts;
 }
- 
-// write a string to specified output. 
-void writeToOutput(int filedes, string str)
-{
-  write(filedes, &str, str.length()); 
-}
 
-void parseOutput(string output, int des)
+void parseInput(string line_in, int des)
 {
-  vector<string> parts = splitString(output);
+  vector<string> parts = splitString(line_in);
   char *args[parts.size() + 1];
   
   for(int i = 0; i < parts.size(); i++)
@@ -105,7 +100,8 @@ void parseOutput(string output, int des)
   }
   else if(strcmp(args[0], "pwd") == 0)
   {
-  
+    write(des, curWD.c_str(), curWD.length());
+    write(des, "\n", 1);
   }
   else if(strcmp(args[0], "history") == 0)
   {
@@ -122,8 +118,8 @@ void parseOutput(string output, int des)
     cout << "outputting \n";
     for (int i = 0; i < parts.size(); i++)
     {
-      writeToOutput(des, parts[i]);
-      write(des, "\n",2);
+      write(des, parts[i].c_str(), parts[i].length());
+      write(des, "\n", 1);
     }
   }
 }
@@ -138,35 +134,38 @@ int main(int argc, char **argv)
   int input_loc = STDIN_FILENO;
   
   string prompt = "> ";
-  string output = "";
-  char input;
-
+  string line_in = "";
+  char char_in;
+  
   do
   {
     if(prPrompt == 1)
     {
-      writeToOutput(output_loc, prompt);
+      write(output_loc, prompt.c_str(), prompt.length());
       prPrompt = 0;
     }
-    read(input_loc, &input, 1);
-    switch(input)
+    read(input_loc, &char_in, 1);
+    switch(char_in)
     {
+      case 0x09:
+        write(output_loc, "this is a test line", 19);
+        break;
       //enter pressed
       case 0x0A:
         write(output_loc, "\n",2);
-        parseOutput(output, output_loc);
-        output = "";
+        parseInput(line_in, output_loc);
+        line_in = "";
         prPrompt = 1;
         break;
       //backspace pressed
       case 0x7F:
         write(output_loc, "\b \b", 3);
-        output.erase(output.length() - 1);
+        line_in.erase(line_in.length() - 1);
         break;
       //normal character
       default:
-        write(output_loc, &input, 1);
-        output += input;
+        write(output_loc, &char_in, 1);
+        line_in += char_in;
         break;
     }
   } while (alive == 1);
