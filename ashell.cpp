@@ -55,8 +55,16 @@ vector<string> splitString(string str)
 {
   vector<string> parts;
   string tok;
-  int front = 0;
-  int split = 0;
+  int front;
+  int split;
+  
+  // trims leading and trailing whitespace
+  front = str.find_first_not_of(' ');
+  split = str.find_last_not_of(' ');
+  str = str.substr(front, split - front + 1);
+  
+  front = 0;
+  split = 0;
   
   while(1)
   {
@@ -78,8 +86,13 @@ vector<string> splitString(string str)
   return parts;
 }
 
-void parseInput(string line_in, int des)
+void parseInput(string line_in)
 {
+  if(line_in.empty())
+  {
+    return;
+  }
+  
   vector<string> parts = splitString(line_in);
   char *args[parts.size() + 1];
   
@@ -100,8 +113,8 @@ void parseInput(string line_in, int des)
   }
   else if(strcmp(args[0], "pwd") == 0)
   {
-    write(des, curWD, strlen(curWD));
-    write(des, "\n", 1);
+    write(STDOUT_FILENO, curWD, strlen(curWD));
+    write(STDOUT_FILENO, "\n", 1);
   }
   else if(strcmp(args[0], "history") == 0)
   {
@@ -118,8 +131,8 @@ void parseInput(string line_in, int des)
     cout << "outputting \n";
     for (int i = 0; i < parts.size(); i++)
     {
-      write(des, parts[i].c_str(), parts[i].length());
-      write(des, "\n", 1);
+      write(STDOUT_FILENO, parts[i].c_str(), parts[i].length());
+      write(STDOUT_FILENO, "\n", 1);
     }
   }
 }
@@ -129,10 +142,7 @@ int main(int argc, char **argv)
   struct termios SavedTermAttributes;
   SetNonCanonicalMode(STDIN_FILENO, &SavedTermAttributes);
   
-  int prPrompt = 1;
-  int output_loc = STDOUT_FILENO;
-  int input_loc = STDIN_FILENO;
-  
+  int prPrompt = 1;  
   string prompt = "> ";
   string line_in = "";
   char char_in;
@@ -150,28 +160,28 @@ int main(int argc, char **argv)
         temp = temp.substr(slash,temp.length());
         temp = "/..." + temp;
       }
-      write(output_loc, temp.c_str(), temp.length());
-      write(output_loc, prompt.c_str(), prompt.length());
+      write(STDOUT_FILENO, temp.c_str(), temp.length());
+      write(STDOUT_FILENO, prompt.c_str(), prompt.length());
       prPrompt = 0;
     }
-    read(input_loc, &char_in, 1);
+    read(STDIN_FILENO, &char_in, 1);
     switch(char_in)
     {
       //enter pressed
       case 0x0A:
-        write(output_loc, "\n",2);
-        parseInput(line_in, output_loc);
+        write(STDOUT_FILENO, "\n",2);
+        parseInput(line_in);
         line_in = "";
         prPrompt = 1;
         break;
       //backspace pressed
       case 0x7F:
-        write(output_loc, "\b \b", 3);
+        write(STDOUT_FILENO, "\b \b", 3);
         line_in.erase(line_in.length() - 1);
         break;
       //normal character
       default:
-        write(output_loc, &char_in, 1);
+        write(STDOUT_FILENO, &char_in, 1);
         line_in += char_in;
         break;
     }
