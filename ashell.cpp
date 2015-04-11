@@ -20,7 +20,7 @@ using namespace std;
 
 int alive = 1;
 
-string curWD = "this is the current working directory";
+char* curWD = new char[PATH_MAX];
 string* history = new string[10];
 
 void ResetCanonicalMode(int fd, struct termios *savedattributes)
@@ -100,7 +100,7 @@ void parseInput(string line_in, int des)
   }
   else if(strcmp(args[0], "pwd") == 0)
   {
-    write(des, curWD.c_str(), curWD.length());
+    write(des, curWD, strlen(curWD));
     write(des, "\n", 1);
   }
   else if(strcmp(args[0], "history") == 0)
@@ -137,19 +137,26 @@ int main(int argc, char **argv)
   string line_in = "";
   char char_in;
   
+  getcwd(curWD, PATH_MAX);
+  
   do
   {
     if(prPrompt == 1)
     {
+      string temp = curWD;
+      if(temp.length()>16)
+      {
+        int slash = temp.rfind('/');
+        temp = temp.substr(slash,temp.length());
+        temp = "/..." + temp;
+      }
+      write(output_loc, temp.c_str(), temp.length());
       write(output_loc, prompt.c_str(), prompt.length());
       prPrompt = 0;
     }
     read(input_loc, &char_in, 1);
     switch(char_in)
     {
-      case 0x09:
-        write(output_loc, "this is a test line", 19);
-        break;
       //enter pressed
       case 0x0A:
         write(output_loc, "\n",2);
