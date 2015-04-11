@@ -18,6 +18,10 @@
 
 using namespace std;
 
+int alive = 1;
+string curWD = "";
+string* history = new string[10];
+
 void ResetCanonicalMode(int fd, struct termios *savedattributes)
 {
   tcsetattr(fd, TCSANOW, savedattributes);
@@ -82,7 +86,7 @@ void writeToOutput(int filedes, string str)
   }
 }
 
-void parseOutput(string output, int des, int& alive)
+void parseOutput(string output, int des)
 {
   vector<string> parts = splitString(output);
   char *args[parts.size() + 1];
@@ -132,15 +136,12 @@ int main(int argc, char **argv)
   struct termios SavedTermAttributes;
   SetNonCanonicalMode(STDIN_FILENO, &SavedTermAttributes);
   
-  int alive = 1;
   int prPrompt = 1;
   int output_loc = STDOUT_FILENO;
   int input_loc = STDIN_FILENO;
-  string* history = new string[10];
   
   string prompt = "> ";
   string output = "";
-  string curWD = "";
   char input;
 
   do
@@ -156,7 +157,7 @@ int main(int argc, char **argv)
       //enter pressed
       case 0x0A:
         write(output_loc, "\n",2);
-        parseOutput(output, output_loc, alive);
+        parseOutput(output, output_loc);
         output = "";
         prPrompt = 1;
         break;
