@@ -14,14 +14,14 @@
 #include <stdio.h>
 #include <vector>
 
-#include <iostream>
+#include <iostream> //remove this.
 
 using namespace std;
 
 int alive = 1;
 
 char* curWD = new char[PATH_MAX];
-string* history = new string[10];
+vector<string> history;
 
 void ResetCanonicalMode(int fd, struct termios *savedattributes)
 {
@@ -86,6 +86,15 @@ vector<string> splitString(string str)
   return parts;
 }
 
+void addToHistory(string str)
+{
+  if(history.size() == 10)
+  {
+    history.erase(history.begin());
+  }
+  history.push_back(str);
+}
+
 void parseInput(string line_in)
 {
   if(line_in.empty())
@@ -105,7 +114,14 @@ void parseInput(string line_in)
   
   if(strcmp(args[0], "cd") == 0)
   {
-    
+    if(args[1] == NULL)
+    {
+      cout<<"this works? \n";
+    }
+    else
+    {
+    string direc;
+    }
   } 
   else if(strcmp(args[0], "ls") == 0)
   {
@@ -118,7 +134,15 @@ void parseInput(string line_in)
   }
   else if(strcmp(args[0], "history") == 0)
   {
-    
+    char entry;
+    for(int i = 0; i < history.size(); i++)
+    {
+      entry = '0' + i;
+      write(STDOUT_FILENO, &entry, 1);
+      write(STDOUT_FILENO, " ", 1);
+      write(STDOUT_FILENO, history[i].c_str(), history[i].length());
+      write(STDOUT_FILENO, "\n", 1);
+    }
   }
   else if(strcmp(args[0], "exit") == 0)
   {
@@ -127,6 +151,7 @@ void parseInput(string line_in)
   } 
   else 
   {
+    // delete through next comment
     //temporary printing of func plus args
     cout << "outputting \n";
     for (int i = 0; i < parts.size(); i++)
@@ -134,6 +159,8 @@ void parseInput(string line_in)
       write(STDOUT_FILENO, parts[i].c_str(), parts[i].length());
       write(STDOUT_FILENO, "\n", 1);
     }
+    //delete until previous comment
+    
   }
 }
  
@@ -170,14 +197,22 @@ int main(int argc, char **argv)
       //enter pressed
       case 0x0A:
         write(STDOUT_FILENO, "\n",2);
+        addToHistory(line_in);
         parseInput(line_in);
         line_in = "";
         prPrompt = 1;
         break;
       //backspace pressed
       case 0x7F:
-        write(STDOUT_FILENO, "\b \b", 3);
-        line_in.erase(line_in.length() - 1);
+        if(line_in.empty())
+        {
+          write(STDOUT_FILENO, "\a", 1);
+        }
+        else
+        {
+          write(STDOUT_FILENO, "\b \b", 3);
+          line_in.erase(line_in.length() - 1);
+        }
         break;
       //normal character
       default:
