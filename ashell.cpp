@@ -70,17 +70,29 @@ vector<string> splitString(string str)
   
   while(1)
   {
-    split = str.find(' ', front);
+    split = str.find_first_of(" <>/|&", front);
     if(split != -1)
     {
       tok = str.substr(front, split - front);
-      front = str.find_first_not_of(' ', split);
+      front = str.find_first_not_of(" ", split);
+      split = front;
+      if(strcspn(&str[split], "<>/|&") == 0)
+      {
+        parts.push_back(tok);
+        tok = str[split];
+        front = str.find_first_not_of(" <>/|&", split);
+      }
       parts.push_back(tok);
+      continue;
     }
-    else
+    else if(front != -1)
     {
       tok = str.substr(front, str.size());
       parts.push_back(tok);
+      break;
+    }
+    else
+    {
       break;
     }
   }
@@ -208,6 +220,19 @@ void printPermissions(char *dir_name, char *file_name)
   write(STDOUT_FILENO, " ", 1);
 }
 
+char ** getArgs(vector<string> str)
+{
+  char **args = new char*[str.size() + 1];
+  for(int i = 0; i < str.size(); i++)
+  {
+    args[i] = new char [str[i].size()+1];
+    strcpy(args[i], str[i].c_str());
+  }
+  args[str.size()] = NULL;
+  
+  return args;
+}
+
 void parseInput(string line_in)
 {
   if(line_in.empty())
@@ -215,145 +240,200 @@ void parseInput(string line_in)
     return;
   }
   
-  vector<string> parts = splitString(line_in);
-  char *args[parts.size() + 1];
+  
+  int redir_out = 0;
+  int redir_in = 0;
+  
+  string out_loc = "";
+  string in_loc = "";
+  
+  int num_pipes = 0;
+  int wait = 1;
+  
+  vector <string> parts = splitString(line_in);
+  
+  vector <vector <string> > cmds(1);
   
   for(int i = 0; i < parts.size(); i++)
   {
-    args[i] = new char [parts[i].size()+1];
-    strcpy(args[i], parts[i].c_str());
-  }
-  args[parts.size()] = NULL;
-  
-  pid_t pid = fork();
-  
-  //fork failed
-  if(pid < 0)
-  {
-    write(STDOUT_FILENO, "Error!\n", 7);
-  }
-  //child process
-  else if (pid == 0)
-  {
-    if(strcmp(args[0], "ls") == 0)
+    if(parts[i] == "<")
     {
-      char *dir_name;
-      if(args[1] == NULL)
+      redir_in = 1;
+      in_loc = parts[i + 1];
+      parts.erase(parts.begin() + i);
+      parts.erase(parts.begin() + i);
+      i--;
+    }
+    else if(parts[i] == ">")
+    {
+      redir_out = 1;
+      out_loc = parts[i + 1];
+      parts.erase(parts.begin() + i);
+      parts.erase(parts.begin() + i);
+      i--;
+    }
+    else if(parts[i] == "|")
+    {
+      num_pipes++;
+      cmds.resize(cmds.size() + 1);
+    }
+    else if(parts[i] == "&")
+    {
+      if(parts.back() == "&")
       {
-        dir_name = curWD;
+        wait = 0;
       }
-      else
-      {
-        dir_name = args[1];
-      }
-      
-      DIR *dir = opendir(dir_name);
-      
-      if(dir == NULL)
+    }
+    else
+    {
+      cmds[num_pipes].push_back(parts[i]);
+    }
+  }
+  
+  char **args = getArgs(cmds[0]);
+  
+  // cd and exit are parent functions
+  if(strcmp(args[0], "cd") == 0)
+  {
+    if(args[1] == NULL)
+    {
+      chdir(home_path);
+    }
+    else
+    {
+      char *direc = args[1];
+      if(chdir(direc) == -1)
       {
         if(errno == EACCES)
-          {
-            write(STDOUT_FILENO, "Permission denied.\n", 19);
-          }
-          else if(errno == ENOTDIR)
-          {
-            write(STDOUT_FILENO, dir_name, strlen(dir_name));
-            write(STDOUT_FILENO, " not a directory!\n", 18);
-          }
-          else
-          {
-            write(STDOUT_FILENO, "Error listing directory.\n", 25);
-          }
-      }
-      else
-      {
-        struct dirent *dp;
-        while((dp = readdir(dir)) != NULL)
         {
-          printPermissions(dir_name, dp->d_name);
-          write(STDOUT_FILENO, dp->d_name, strlen(dp->d_name));
-          write(STDOUT_FILENO, "\n", 1);
+          write(STDOUT_FILENO, "Permission denied.\n", 19);
+        }
+        else if(errno == ENOTDIR)
+        {
+          write(STDOUT_FILENO, direc, strlen(direc));
+          write(STDOUT_FILENO, " not a directory!\n", 18);
+        }
+        else
+        {
+          write(STDOUT_FILENO, "Error changing directory.\n", 26);
+        }
+      }
+    }
+    getcwd(curWD, PATH_MAX);
+    return;
+  } 
+  else if(strcmp(args[0], "exit") == 0)
+  {
+    alive = 0;
+    return;
+  }
+  //fork then execute
+  else 
+  {
+    pid_t pid = fork();
+    //fork failed
+    if(pid < 0)
+    {
+      write(STDOUT_FILENO, "Error!\n", 7);
+    }
+    //child process
+    else if (pid == 0)
+    {
+      if(redir_in == 1)
+      {
+        int fd = open(in_loc.c_str(), O_RDONLY);
+        dup2(fd, STDIN_FILENO);
+        close(fd);
+      }
+      
+      if(redir_out == 1)
+      {
+        int fd = open(out_loc.c_str(), O_WRONLY | O_CREAT, S_IRWXU | S_IRWXG | S_IRWXO);
+        dup2(fd, STDOUT_FILENO);
+        close(fd);
+      }
+            
+      //TODO piping
+      
+      if(strcmp(args[0], "ls") == 0)
+      {
+        char *dir_name;
+        if(args[1] == NULL)
+        {
+          dir_name = curWD;
+        }
+        else
+        {
+          dir_name = args[1];
         }
         
-      }
-      closedir(dir);
-    }
-    else if(strcmp(args[0], "pwd") == 0)
-    {
-      write(STDOUT_FILENO, curWD, strlen(curWD));
-      write(STDOUT_FILENO, "\n", 1);
-    }
-    else if(strcmp(args[0], "history") == 0)
-    {
-      char entry;
-      for(int i = 0; i < history.size(); i++)
-      {
-        entry = '0' + i;
-        write(STDOUT_FILENO, &entry, 1);
-        write(STDOUT_FILENO, " ", 1);
-        write(STDOUT_FILENO, history[i].c_str(), history[i].length());
-        write(STDOUT_FILENO, "\n", 1);
-      }
-    }
-    else if(strcmp(args[0], "cd") == 0)
-    {
-    } 
-    else if(strcmp(args[0], "exit") == 0)
-    {
-    }
-    else 
-    {
-      if(execvp(args[0], args) == -1)
-      {
-        write(STDOUT_FILENO, "Failed to execute ",18);
-        write(STDOUT_FILENO, args[0], strlen(args[0]));
-        write(STDOUT_FILENO, "\n", 1);
-      }
-      exit(1);
-    }
-    exit(0);
-  }
-  //parent process
-  else
-  {
-    if(strcmp(args[0], "cd") == 0)
-    {
-      if(args[1] == NULL)
-      {
-        chdir(home_path);
-      }
-      else
-      {
-        char *direc = args[1];
-        if(chdir(direc) == -1)
+        DIR *dir = opendir(dir_name);
+        
+        if(dir == NULL)
         {
           if(errno == EACCES)
+            {
+              write(STDOUT_FILENO, "Permission denied.\n", 19);
+            }
+            else if(errno == ENOTDIR)
+            {
+              write(STDOUT_FILENO, dir_name, strlen(dir_name));
+              write(STDOUT_FILENO, " not a directory!\n", 18);
+            }
+            else
+            {
+              write(STDOUT_FILENO, "Error listing directory.\n", 25);
+            }
+        }
+        else
+        {
+          struct dirent *dp;
+          while((dp = readdir(dir)) != NULL)
           {
-            write(STDOUT_FILENO, "Permission denied.\n", 19);
-          }
-          else if(errno == ENOTDIR)
-          {
-            write(STDOUT_FILENO, direc, strlen(direc));
-            write(STDOUT_FILENO, " not a directory!\n", 18);
-          }
-          else
-          {
-            write(STDOUT_FILENO, "Error changing directory.\n", 26);
+            printPermissions(dir_name, dp->d_name);
+            write(STDOUT_FILENO, dp->d_name, strlen(dp->d_name));
+            write(STDOUT_FILENO, "\n", 1);
           }
         }
+        closedir(dir);
       }
-      getcwd(curWD, PATH_MAX);
-      return;
-    } 
-    else if(strcmp(args[0], "exit") == 0)
-    {
-      alive = 0;
-      return;
+      else if(strcmp(args[0], "pwd") == 0)
+      {
+        write(STDOUT_FILENO, curWD, strlen(curWD));
+        write(STDOUT_FILENO, "\n", 1);
+      }
+      else if(strcmp(args[0], "history") == 0)
+      {
+        char entry;
+        for(int i = 0; i < history.size(); i++)
+        {
+          entry = '0' + i;
+          write(STDOUT_FILENO, &entry, 1);
+          write(STDOUT_FILENO, " ", 1);
+          write(STDOUT_FILENO, history[i].c_str(), history[i].length());
+          write(STDOUT_FILENO, "\n", 1);
+        }
+      }
+      else 
+      {
+        if(execvp(args[0], args) == -1)
+        {
+          write(STDOUT_FILENO, "Failed to execute ",18);
+          write(STDOUT_FILENO, args[0], strlen(args[0]));
+          write(STDOUT_FILENO, "\n", 1);
+        }
+        exit(1);
+      }
+      exit(0);
     }
-    else 
+    //parent process
+    else
     {
-      int status = 0;
-      waitpid(pid, &status, 0);
+      if(wait == 1)
+      {
+        int status = 0;
+        waitpid(pid, &status, 0);
+      }
     }
   }
 }
