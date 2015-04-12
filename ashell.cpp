@@ -90,6 +90,10 @@ vector<string> splitString(string str)
 
 void addToHistory(string str)
 {
+  if(str.empty())
+  {
+    return;
+  }
   if(history.size() == 10)
   {
     history.erase(history.begin());
@@ -221,115 +225,136 @@ void parseInput(string line_in)
   }
   args[parts.size()] = NULL;
   
-  if(strcmp(args[0], "cd") == 0)
+  pid_t pid = fork();
+  
+  //fork failed
+  if(pid < 0)
   {
-    if(args[1] == NULL)
+    write(STDOUT_FILENO, "Error!\n", 7);
+  }
+  //child process
+  else if (pid == 0)
+  {
+    if(strcmp(args[0], "ls") == 0)
     {
-      chdir(home_path);
-    }
-    else
-    {
-      char *direc = args[1];
-      if(chdir(direc) == -1)
+      char *dir_name;
+      if(args[1] == NULL)
       {
-        if(errno == EACCES)
-        {
-          write(STDOUT_FILENO, "Permission denied.\n", 19);
-        }
-        else if(errno == ENOTDIR)
-        {
-          write(STDOUT_FILENO, direc, strlen(direc));
-          write(STDOUT_FILENO, " not a directory!\n", 18);
-        }
-        else
-        {
-          write(STDOUT_FILENO, "Error changing directory.\n", 26);
-        }
+        dir_name = curWD;
       }
-    }
-    getcwd(curWD, PATH_MAX);
-    return;
-  } 
-  else if(strcmp(args[0], "ls") == 0)
-  {
-    char *dir_name;
-    if(args[1] == NULL)
-    {
-      dir_name = curWD;
-    }
-    else
-    {
-      dir_name = args[1];
-    }
-    
-    DIR *dir = opendir(dir_name);
-    
-    if(dir == NULL)
-    {
-      if(errno == EACCES)
-        {
-          write(STDOUT_FILENO, "Permission denied.\n", 19);
-        }
-        else if(errno == ENOTDIR)
-        {
-          write(STDOUT_FILENO, dir_name, strlen(dir_name));
-          write(STDOUT_FILENO, " not a directory!\n", 18);
-        }
-        else
-        {
-          write(STDOUT_FILENO, "Error listing directory.\n", 25);
-        }
-    }
-    else
-    {
-      struct dirent *dp;
-      while((dp = readdir(dir)) != NULL)
+      else
       {
-        printPermissions(dir_name, dp->d_name);
-        write(STDOUT_FILENO, dp->d_name, strlen(dp->d_name));
-        write(STDOUT_FILENO, "\n", 1);
+        dir_name = args[1];
       }
       
+      DIR *dir = opendir(dir_name);
+      
+      if(dir == NULL)
+      {
+        if(errno == EACCES)
+          {
+            write(STDOUT_FILENO, "Permission denied.\n", 19);
+          }
+          else if(errno == ENOTDIR)
+          {
+            write(STDOUT_FILENO, dir_name, strlen(dir_name));
+            write(STDOUT_FILENO, " not a directory!\n", 18);
+          }
+          else
+          {
+            write(STDOUT_FILENO, "Error listing directory.\n", 25);
+          }
+      }
+      else
+      {
+        struct dirent *dp;
+        while((dp = readdir(dir)) != NULL)
+        {
+          printPermissions(dir_name, dp->d_name);
+          write(STDOUT_FILENO, dp->d_name, strlen(dp->d_name));
+          write(STDOUT_FILENO, "\n", 1);
+        }
+        
+      }
+      closedir(dir);
     }
-    closedir(dir);   
-    return;
-  }
-  else if(strcmp(args[0], "pwd") == 0)
-  {
-    write(STDOUT_FILENO, curWD, strlen(curWD));
-    write(STDOUT_FILENO, "\n", 1);
-    return;
-  }
-  else if(strcmp(args[0], "history") == 0)
-  {
-    char entry;
-    for(int i = 0; i < history.size(); i++)
+    else if(strcmp(args[0], "pwd") == 0)
     {
-      entry = '0' + i;
-      write(STDOUT_FILENO, &entry, 1);
-      write(STDOUT_FILENO, " ", 1);
-      write(STDOUT_FILENO, history[i].c_str(), history[i].length());
+      write(STDOUT_FILENO, curWD, strlen(curWD));
       write(STDOUT_FILENO, "\n", 1);
     }
-    return;
-  }
-  else if(strcmp(args[0], "exit") == 0)
-  {
-    alive = 0;
-    return;
-  } 
-  else 
-  {
-    // delete through next comment
-    //temporary printing of func plus args
-    cout << "outputting \n";
-    for (int i = 0; i < parts.size(); i++)
+    else if(strcmp(args[0], "history") == 0)
     {
-      write(STDOUT_FILENO, parts[i].c_str(), parts[i].length());
-      write(STDOUT_FILENO, "\n", 1);
+      char entry;
+      for(int i = 0; i < history.size(); i++)
+      {
+        entry = '0' + i;
+        write(STDOUT_FILENO, &entry, 1);
+        write(STDOUT_FILENO, " ", 1);
+        write(STDOUT_FILENO, history[i].c_str(), history[i].length());
+        write(STDOUT_FILENO, "\n", 1);
+      }
     }
-    //delete until previous comment
-    
+    else if(strcmp(args[0], "cd") == 0)
+    {
+    } 
+    else if(strcmp(args[0], "exit") == 0)
+    {
+    }
+    else 
+    {
+      if(execvp(args[0], args) == -1)
+      {
+        write(STDOUT_FILENO, "Failed to execute ",18);
+        write(STDOUT_FILENO, args[0], strlen(args[0]));
+        write(STDOUT_FILENO, "\n", 1);
+      }
+      exit(1);
+    }
+    exit(0);
+  }
+  //parent process
+  else
+  {
+    if(strcmp(args[0], "cd") == 0)
+    {
+      if(args[1] == NULL)
+      {
+        chdir(home_path);
+      }
+      else
+      {
+        char *direc = args[1];
+        if(chdir(direc) == -1)
+        {
+          if(errno == EACCES)
+          {
+            write(STDOUT_FILENO, "Permission denied.\n", 19);
+          }
+          else if(errno == ENOTDIR)
+          {
+            write(STDOUT_FILENO, direc, strlen(direc));
+            write(STDOUT_FILENO, " not a directory!\n", 18);
+          }
+          else
+          {
+            write(STDOUT_FILENO, "Error changing directory.\n", 26);
+          }
+        }
+      }
+      getcwd(curWD, PATH_MAX);
+      return;
+    } 
+    else if(strcmp(args[0], "exit") == 0)
+    {
+      alive = 0;
+      return;
+    }
+    else 
+    {
+      int status = 0;
+      waitpid(pid, &status, 0);
+    }
   }
 }
  
