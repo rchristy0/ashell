@@ -55,7 +55,7 @@ void SetNonCanonicalMode(int fd, struct termios *savedattributes)
  
 vector<string> splitString(string str)
 {
-  vector<string> parts;
+  vector<string> tokens;
   string tok;
   int front;
   int split;
@@ -78,17 +78,17 @@ vector<string> splitString(string str)
       split = front;
       if(strcspn(&str[split], "<>/|&") == 0)
       {
-        parts.push_back(tok);
+        tokens.push_back(tok);
         tok = str[split];
         front = str.find_first_not_of(" <>/|&", split);
       }
-      parts.push_back(tok);
+      tokens.push_back(tok);
       continue;
     }
     else if(front != -1)
     {
       tok = str.substr(front, str.size());
-      parts.push_back(tok);
+      tokens.push_back(tok);
       break;
     }
     else
@@ -96,8 +96,7 @@ vector<string> splitString(string str)
       break;
     }
   }
-  
-  return parts;
+  return tokens;
 }
 
 void addToHistory(string str)
@@ -239,8 +238,7 @@ void parseInput(string line_in)
   {
     return;
   }
-  
-  
+
   int redir_out = 0;
   int redir_in = 0;
   
@@ -248,45 +246,48 @@ void parseInput(string line_in)
   string in_loc = "";
   
   int num_pipes = 0;
+  int previnpipe = -1;
+  int inpipe = -1;
+  int outpipe = -1;
   int wait = 1;
+  vector <int> pids;
   
-  vector <string> parts = splitString(line_in);
-  
+  vector <string> tokens = splitString(line_in);
   vector <vector <string> > cmds(1);
   
-  for(int i = 0; i < parts.size(); i++)
+  for(int i = 0; i < tokens.size(); i++)
   {
-    if(parts[i] == "<")
+    if(tokens[i] == "<")
     {
       redir_in = 1;
-      in_loc = parts[i + 1];
-      parts.erase(parts.begin() + i);
-      parts.erase(parts.begin() + i);
+      in_loc = tokens[i + 1];
+      tokens.erase(tokens.begin() + i);
+      tokens.erase(tokens.begin() + i);
       i--;
     }
-    else if(parts[i] == ">")
+    else if(tokens[i] == ">")
     {
       redir_out = 1;
-      out_loc = parts[i + 1];
-      parts.erase(parts.begin() + i);
-      parts.erase(parts.begin() + i);
+      out_loc = tokens[i + 1];
+      tokens.erase(tokens.begin() + i);
+      tokens.erase(tokens.begin() + i);
       i--;
     }
-    else if(parts[i] == "|")
+    else if(tokens[i] == "|")
     {
       num_pipes++;
       cmds.resize(cmds.size() + 1);
     }
-    else if(parts[i] == "&")
+    else if(tokens[i] == "&")
     {
-      if(parts.back() == "&")
+      if(tokens.back() == "&")
       {
         wait = 0;
       }
     }
     else
     {
-      cmds[num_pipes].push_back(parts[i]);
+      cmds[num_pipes].push_back(tokens[i]);
     }
   }
   
@@ -330,109 +331,152 @@ void parseInput(string line_in)
   //fork then execute
   else 
   {
-    pid_t pid = fork();
-    //fork failed
-    if(pid < 0)
+    //loop for each cmd that needs to run (1 more than pipes)
+    for (int i = 0; i < num_pipes + 1; i++)
     {
-      write(STDOUT_FILENO, "Error!\n", 7);
-    }
-    //child process
-    else if (pid == 0)
-    {
-      if(redir_in == 1)
+      int pip[2]; 
+      args = getArgs(cmds[i]); //get next set of cmds
+      
+      //new pipe if not the last set of cmds
+      if((num_pipes > 0) & (i != num_pipes))
       {
-        int fd = open(in_loc.c_str(), O_RDONLY);
-        dup2(fd, STDIN_FILENO);
-        close(fd);
+        pipe(pip);
+        inpipe = pip[0];
+        outpipe = pip[1];
       }
       
-      if(redir_out == 1)
+      pid_t pid = fork();      
+      //fork failed
+      if(pid < 0)
       {
-        int fd = open(out_loc.c_str(), O_WRONLY | O_CREAT, S_IRWXU | S_IRWXG | S_IRWXO);
-        dup2(fd, STDOUT_FILENO);
-        close(fd);
+        write(STDOUT_FILENO, "Error!\n", 7);
       }
-            
-      //TODO piping
-      
-      if(strcmp(args[0], "ls") == 0)
+      //child process
+      else if (pid == 0)
       {
-        char *dir_name;
-        if(args[1] == NULL)
+        //redirect input
+        if(redir_in == 1)
         {
-          dir_name = curWD;
-        }
-        else
-        {
-          dir_name = args[1];
+          int fd = open(in_loc.c_str(), O_RDONLY);
+          dup2(fd, STDIN_FILENO);
+          close(fd);
         }
         
-        DIR *dir = opendir(dir_name);
-        
-        if(dir == NULL)
+        //redirect output
+        if(redir_out == 1)
         {
-          if(errno == EACCES)
-            {
-              write(STDOUT_FILENO, "Permission denied.\n", 19);
-            }
-            else if(errno == ENOTDIR)
-            {
-              write(STDOUT_FILENO, dir_name, strlen(dir_name));
-              write(STDOUT_FILENO, " not a directory!\n", 18);
-            }
-            else
-            {
-              write(STDOUT_FILENO, "Error listing directory.\n", 25);
-            }
+          int fd = open(out_loc.c_str(), O_WRONLY | O_CREAT, S_IRWXU | S_IRWXG | S_IRWXO);
+          dup2(fd, STDOUT_FILENO);
+          close(fd);
         }
-        else
+              
+        //redirect input from previnpipe
+        if(previnpipe != -1)
         {
-          struct dirent *dp;
-          while((dp = readdir(dir)) != NULL)
+          dup2(previnpipe, STDIN_FILENO);
+        }
+        
+        //redirect output to outpipe
+        if(outpipe != -1)
+        {
+          dup2(outpipe, STDOUT_FILENO);
+        }
+        
+        if(strcmp(args[0], "ls") == 0) 
+        {
+          char *dir_name;
+          if(args[1] == NULL)
           {
-            printPermissions(dir_name, dp->d_name);
-            write(STDOUT_FILENO, dp->d_name, strlen(dp->d_name));
+            dir_name = curWD;
+          }
+          else
+          {
+            dir_name = args[1];
+          }
+          
+          DIR *dir = opendir(dir_name);
+          
+          if(dir == NULL)
+          {
+            if(errno == EACCES)
+              {
+                write(STDOUT_FILENO, "Permission denied.\n", 19);
+              }
+              else if(errno == ENOTDIR)
+              {
+                write(STDOUT_FILENO, dir_name, strlen(dir_name));
+                write(STDOUT_FILENO, " not a directory!\n", 18);
+              }
+              else
+              {
+                write(STDOUT_FILENO, "Error listing directory.\n", 25);
+              }
+          }
+          else
+          {
+            struct dirent *dp;
+            while((dp = readdir(dir)) != NULL)
+            {
+              printPermissions(dir_name, dp->d_name);
+              write(STDOUT_FILENO, dp->d_name, strlen(dp->d_name));
+              write(STDOUT_FILENO, "\n", 1);
+            }
+          }
+          closedir(dir);
+        }
+        else if(strcmp(args[0], "pwd") == 0)
+        {
+          write(STDOUT_FILENO, curWD, strlen(curWD));
+          write(STDOUT_FILENO, "\n", 1);
+        }
+        else if(strcmp(args[0], "history") == 0)
+        {
+          char entry;
+          for(int i = 0; i < history.size(); i++)
+          {
+            entry = '0' + i;
+            write(STDOUT_FILENO, &entry, 1);
+            write(STDOUT_FILENO, " ", 1);
+            write(STDOUT_FILENO, history[i].c_str(), history[i].length());
             write(STDOUT_FILENO, "\n", 1);
           }
         }
-        closedir(dir);
-      }
-      else if(strcmp(args[0], "pwd") == 0)
-      {
-        write(STDOUT_FILENO, curWD, strlen(curWD));
-        write(STDOUT_FILENO, "\n", 1);
-      }
-      else if(strcmp(args[0], "history") == 0)
-      {
-        char entry;
-        for(int i = 0; i < history.size(); i++)
+        else 
         {
-          entry = '0' + i;
-          write(STDOUT_FILENO, &entry, 1);
-          write(STDOUT_FILENO, " ", 1);
-          write(STDOUT_FILENO, history[i].c_str(), history[i].length());
-          write(STDOUT_FILENO, "\n", 1);
+          if(execvp(args[0], args) == -1)
+          {
+            write(STDOUT_FILENO, "Failed to execute ",18);
+            write(STDOUT_FILENO, args[0], strlen(args[0]));
+            write(STDOUT_FILENO, "\n", 1);
+          }
+          exit(1);
         }
+        exit(0);
       }
-      else 
+      //parent process
+      else
       {
-        if(execvp(args[0], args) == -1)
+        pids.push_back(pid);
+        
+        if(previnpipe != -1)
         {
-          write(STDOUT_FILENO, "Failed to execute ",18);
-          write(STDOUT_FILENO, args[0], strlen(args[0]));
-          write(STDOUT_FILENO, "\n", 1);
+          close(previnpipe);
         }
-        exit(1);
+        
+        if(outpipe != -1)
+        {
+          close(outpipe);
+        }
+        
+        previnpipe = inpipe;
       }
-      exit(0);
     }
-    //parent process
-    else
-    {
+    for(int i = 0; i < pids.size(); i++)
+    {  
       if(wait == 1)
       {
         int status = 0;
-        waitpid(pid, &status, 0);
+        waitpid(pids[i], &status, 0);
       }
     }
   }
